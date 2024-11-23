@@ -591,7 +591,7 @@ async fn fetch_piece(
                 "block {block:3}/{total_num_blocks}, i = {i:3}: blk_i = {block_idx}, \
                  peer_idx = {peer_idx}; pc idx = {index}, begin = {begin}, length = {length}"
             );
-            // eprintln!("block {block:3}/{total_num_blocks}, i = {i:3}: piece index = {index}, begin = {begin}, length = {length}"); //todo rem
+            eprintln!("block {block:3}/{total_num_blocks}, i = {i:3}: piece index = {index}, begin = {begin}, length = {length}"); //todo rem
             peer.feed(msg).await.context("Feed a Request message")?;
 
             if i == current_num_blocks_per_piece - 1 {
