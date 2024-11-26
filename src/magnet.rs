@@ -4,8 +4,7 @@
 //! from peers without needing a torrent file.
 //!
 //! The magnet URI format is:
-//!
-//! `v1: magnet:?xt=urn:btih:<info-hash>&dn=<name>&tr=<tracker-url>&x.pe=<peer-address>`
+//! - v1: `magnet:?xt=urn:btih:<info-hash>&dn=<name>&tr=<tracker-url>&x.pe=<peer-address>`
 //!
 //! Unlike .torrent files, magnet links don't contain information like file length, piece length and piece hashes.
 //! They only include the bare minimum information necessary to discover peers.
@@ -26,12 +25,22 @@
 //! - `xt` (info hash) is the only required parameter, all others are optional.
 //! - A magnet link can contain multiple tracker URLs, but for the purposes of this challenge it'll only contain one.
 //!
-//! Usage:
+//! ## Additional Info
+//!
+//! - [Extension for Peers to Send Metadata Files](https://www.bittorrent.org/beps/bep_0009.html)
+//! - https://en.wikipedia.org/wiki/Magnet_URI_scheme
+//! - [Extension Protocol](https://www.bittorrent.org/beps/bep_0010.html)
+//!
+//! ## Usage
+//!
+//! ### Parse Magnet Link
+//!
 //! ```shell
 //! $ ./your_bittorrent.sh magnet_parse "<magnet-link>"
 //! ```
 //!
-//! Example:
+//! #### Example
+//!
 //! ```shell
 //! $ ./your_bittorrent.sh magnet_parse "magnet:?xt=urn:btih:ad42ce8109f54c99613ce38f9b4d87e70f24a165&dn=magnet1.gif&tr=http%3A%2F%2Fbittorrent-test-tracker.codecrafters.io%2Fannounce"
 //! ```
@@ -42,9 +51,18 @@
 //! Info Hash: ad42ce8109f54c99613ce38f9b4d87e70f24a165
 //! ```
 //!
-//! More info at:
-//! - https://www.bittorrent.org/beps/bep_0009.html
-//! - https://en.wikipedia.org/wiki/Magnet_URI_scheme
+//! ### Announce Extension Support
+//!
+//! ```shell
+//! $ ./your_bittorrent.sh magnet_handshake "<magnet-link>"
+//! ```
+//!
+//! We can use [these magnet links](https://github.com/codecrafters-io/bittorrent-test-seeder/blob/main/torrent_files/magnet_links.txt)
+//! to test program locally. They are copied below.
+//! We might need to surround links with double quotes to escape special characters in terminal.
+//! - magnet1.gif.torrent: `magnet:?xt=urn:btih:ad42ce8109f54c99613ce38f9b4d87e70f24a165&dn=magnet1.gif&tr=http%3A%2F%2Fbittorrent-test-tracker.codecrafters.io%2Fannounce`
+//! - magnet2.gif.torrent: `magnet:?xt=urn:btih:3f994a835e090238873498636b98a3e78d1c34ca&dn=magnet2.gif&tr=http%3A%2F%2Fbittorrent-test-tracker.codecrafters.io%2Fannounce`
+//! - magnet3.gif.torrent: `magnet:?xt=urn:btih:c5fb9894bdaba464811b088d806bdd611ba490af&dn=magnet3.gif&tr=http%3A%2F%2Fbittorrent-test-tracker.codecrafters.io%2Fannounce`
 
 use anyhow::Result;
 
@@ -60,17 +78,23 @@ pub fn parse_magnet_link(magnet_link: &str) -> Result<MagnetLink, MagnetError> {
 
 mod magnet_link {
     //! Magnet link
+    //!
+    //! - https://www.bittorrent.org/beps/bep_0009.html
+    //! - https://en.wikipedia.org/wiki/Magnet_URI_scheme
+
     use crate::errors::MagnetLinkError;
     use anyhow::Result;
     use std::fmt::{Display, Formatter};
 
     /// Magnet link
+    ///
+    /// Supports `xt`, `dn` and `tr` parameters. Only `xt` is mandatory.
     #[derive(Debug)]
     pub struct MagnetLink {
         /// Exact Topic, `xt`, specifies the URN containing file hash. Mandatory.
         pub xt: String,
 
-        /// Display name, `dn`, may be used by the client to display while waiting for metadata. Optional.
+        /// Display Name, `dn`, may be used by the client to display while waiting for metadata. Optional.
         pub dn: Option<String>,
 
         /// Tracker URL. Optional.

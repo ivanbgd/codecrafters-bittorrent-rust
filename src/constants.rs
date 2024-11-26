@@ -35,6 +35,8 @@ pub const BT_PROTOCOL: &str = "BitTorrent protocol";
 pub const BT_PROTO_LEN: usize = BT_PROTOCOL.len();
 /// Handshake reserved, eight zero bytes
 pub const HANDSHAKE_RESERVED: [u8; 8] = [0; 8];
+/// Indicate that our client supports extensions; 20th bit from the right, counting starts at 0
+pub const EXTENSION_SUPPORT_BIT: u8 = 1 << 4;
 /// Handshake message length, 68
 pub const HANDSHAKE_MSG_LEN: usize = 68;
 
