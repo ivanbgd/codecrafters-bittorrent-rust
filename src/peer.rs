@@ -61,10 +61,14 @@ impl Peer {
     ///
     /// Also sets the 20 bytes long SHA1 representation of the `peer_id` received during a successful handshake.
     pub(crate) async fn handshake(&mut self, info_hash: &[u8; SHA1_LEN]) -> Result<(), PeerError> {
+        let mut res = HANDSHAKE_RESERVED;
+        res[5] |= 1 << 4;
+        eprintln!("{res:?}");
+
         let mut buf = [0u8; HANDSHAKE_MSG_LEN];
         buf[0] = BT_PROTO_LEN as u8;
         buf[BT_PROTOCOL_RANGE].copy_from_slice(BT_PROTOCOL.as_bytes());
-        buf[HANDSHAKE_RESERVED_RANGE].copy_from_slice(&HANDSHAKE_RESERVED);
+        buf[HANDSHAKE_RESERVED_RANGE].copy_from_slice(&res);
         buf[INFO_HASH_RANGE].copy_from_slice(info_hash);
         buf[PEER_ID_RANGE].copy_from_slice(PEER_ID.as_bytes());
 
