@@ -23,6 +23,12 @@ pub enum MetaInfoError {
     Other(#[from] anyhow::Error),
 }
 
+impl PartialEq for MetaInfoError {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string() == other.to_string()
+    }
+}
+
 impl From<MetaInfoError> for String {
     fn from(value: MetaInfoError) -> Self {
         value.to_string()
@@ -45,6 +51,12 @@ pub enum TrackerError {
     Other(#[from] anyhow::Error),
 }
 
+impl PartialEq for TrackerError {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string() == other.to_string()
+    }
+}
+
 impl From<TrackerError> for String {
     fn from(value: TrackerError) -> Self {
         value.to_string()
@@ -52,7 +64,7 @@ impl From<TrackerError> for String {
 }
 
 /// Errors related to working with [`MessageId`]
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum MessageIdError {
     #[error("Unsupported message ID: {0}")]
     UnsupportedId(u8),
@@ -95,6 +107,12 @@ pub enum MessageCodecError {
 
     #[error(transparent)]
     Other(#[from] anyhow::Error),
+}
+
+impl PartialEq for MessageCodecError {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string() == other.to_string()
+    }
 }
 
 impl From<std::io::Error> for MessageCodecError {
@@ -188,10 +206,19 @@ impl From<PeerError> for String {
 }
 
 /// Errors related to working with [`crate::magnet::*`]
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum MagnetError {
     #[error("Parsing magnet link {0}.")]
     MagnetLinkParseError(#[from] MagnetLinkError),
+
+    #[error(transparent)]
+    PeerError(#[from] PeerError),
+}
+
+impl PartialEq for MagnetError {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string() == other.to_string()
+    }
 }
 
 impl From<MagnetError> for String {

@@ -160,7 +160,7 @@ pub struct TrackerResponse {
     pub peers: Peers,
 }
 
-mod peers {
+pub mod peers {
     //! A compact representation of the peer list
 
     use std::fmt::{Display, Formatter};
