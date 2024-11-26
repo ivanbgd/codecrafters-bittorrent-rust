@@ -45,6 +45,7 @@
 //! More info at:
 //! - https://www.bittorrent.org/beps/bep_0009.html
 //! - https://en.wikipedia.org/wiki/Magnet_URI_scheme
+//! - https://www.bittorrent.org/beps/bep_0010.html
 
 use anyhow::Result;
 
@@ -60,17 +61,23 @@ pub fn parse_magnet_link(magnet_link: &str) -> Result<MagnetLink, MagnetError> {
 
 mod magnet_link {
     //! Magnet link
+    //!
+    //! - https://www.bittorrent.org/beps/bep_0009.html
+    //! - https://en.wikipedia.org/wiki/Magnet_URI_scheme
+
     use crate::errors::MagnetLinkError;
     use anyhow::Result;
     use std::fmt::{Display, Formatter};
 
     /// Magnet link
+    ///
+    /// Supports `xt`, `dn` and `tr` parameters. Only `xt` is mandatory.
     #[derive(Debug)]
     pub struct MagnetLink {
         /// Exact Topic, `xt`, specifies the URN containing file hash. Mandatory.
         pub xt: String,
 
-        /// Display name, `dn`, may be used by the client to display while waiting for metadata. Optional.
+        /// Display Name, `dn`, may be used by the client to display while waiting for metadata. Optional.
         pub dn: Option<String>,
 
         /// Tracker URL. Optional.
