@@ -8,7 +8,7 @@ use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 
-use crate::message::{ExtendedMessageId, MessageId};
+use crate::message::{ExtendedMessageId, ExtensionMessageId, MessageId};
 
 /// Errors related to working with [`crate::meta_info`]
 #[derive(Debug, Error)]
@@ -136,7 +136,7 @@ pub enum PeerError {
     #[error("Tracker error: {0}")]
     TrackerError(#[from] TrackerError),
 
-    #[error("Wrong message ID: {0}, expected {1}")]
+    #[error("Wrong message ID: expected {0}, got {1}")]
     WrongMessageId(MessageId, MessageId),
 
     /// Used at the beginning, if we can't find any per to work with at all.
@@ -178,6 +178,9 @@ pub enum PeerError {
 
     #[error("Wrong extended message ID: expected {0}, got {1}")]
     WrongExtendedMessageId(ExtendedMessageId, ExtendedMessageId),
+
+    #[error("Wrong extension message ID: expected {0}, got {1}")]
+    WrongExtensionMessageId(ExtensionMessageId, ExtensionMessageId),
 
     #[error("Peer's {addr} extension field \"{field}\" not set.")]
     PeerExtensionFieldNotSet { addr: SocketAddrV4, field: String },
