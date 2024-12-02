@@ -256,70 +256,67 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
     //
     // The metadata is handled in blocks of 16 KiB (16384 Bytes). The metadata blocks are indexed starting at 0.
     // All blocks are 16 KiB except the last block which may be smaller.
-    for piece_index in 0..num_pcs {
-        // -> Send the metadata request message
-        let payload =
-            ExtensionPayload::new_request(ExtendedMessageId::Custom(extension_id), piece_index)?;
-        let msg = Message::new(MessageId::Extended, Some(payload.into()));
-        debug!("-> msg = {msg}");
-        peer.feed(msg)
-            .await
-            .context("Feed the metadata request message")?;
-        peer.flush()
-            .await
-            .context("Flush the metadata request message")?;
-
-        // <= Receive the metadata data message
-        let msg = match peer.recv_msg().await {
-            Ok(msg) => msg,
-            Err(err) => {
-                warn!("Receive the metadata data or reject message: {err:#}");
-                return Err(err.into());
-            }
-        };
-        debug!("<= msg = {msg}");
-        if MessageId::Extended != msg.id {
-            let err = PeerError::WrongMessageId(MessageId::Extended, msg.id);
-            warn!("Receive the metadata data or reject message: {err:#}");
-            return Err(err.into());
-        }
-        let payload: ExtensionPayload = msg
-            .payload
-            .expect("Expected to have received the metadata data or reject message")
-            .try_into()?;
-        eprintln!("<= payload = {payload}"); // todo rem
-                                             // eprintln!("<= total_size = {:?}", payload.payload.get("total_size".as_bytes())); // todo rem
-
-        // TODO: Connect all lines.
-
-        // The other peers should send our metadata ID in their responses.
-        if UT_METADATA_ID != <u8>::from(payload.id.clone()) {
-            let err = PeerError::WrongExtendedMessageId(UT_METADATA_ID.try_into()?, payload.id);
-            warn!("Receive the extension handshake message: {err:#}");
-            return Err(err.into());
-        }
-
-        eprintln!(
-            "<= payload.payload = {:?}",
-            String::from_utf8_lossy(&payload.payload)
-        ); // todo rem
-
-        // let val: ExtensionMessage = serde_bencode::from_bytes(&payload.payload)?; // todo rem
-        // eprintln!("<= val = {val:?}"); // todo rem
-
-        // TODO: Perhaps in ExtensionPayload!
-        // TODO: Differentiate between ExtensionMessageId::Data and ExtensionMessageId::Reject and add else. So, => match, but unify Request and Unsupported.
-        // Todo: Reject doesn't contain total_size and contents. Data contains both.
-
-        // Todo: search for "ee" in utf8_lossy representation of payload.payload. Both Data and Reject should have it.
-        // Todo: Now, I can do that here or in ExtensionPayload - decide. Perhaps better in ExtensionPayload to remove that logic from here. We are doing a higher-level logic here.
-
-        // todo: validate this piece's hash
-
-        let len = payload.payload.len(); // todo: do properly!
-        eprintln!("<= len = {len}"); // todo rem
-        let total_size = 91usize; // todo: extract total_size from payload.payload
-        contents.extend(&payload.payload[len - total_size..][..]); // todo
+    for piece_index in 0..num_pcs as u32 {
+        // // -> Send the metadata request message
+        // let payload =
+        //     ExtensionPayload::new_request(ExtendedMessageId::Custom(extension_id), piece_index)?;
+        // let msg = Message::new(MessageId::Extended, Some(payload.into()));
+        // debug!("-> msg = {msg}");
+        // peer.feed(msg)
+        //     .await
+        //     .context("Feed the metadata request message")?;
+        // peer.flush()
+        //     .await
+        //     .context("Flush the metadata request message")?;
+        //
+        // // <= Receive the metadata data message
+        // let msg = match peer.recv_msg().await {
+        //     Ok(msg) => msg,
+        //     Err(err) => {
+        //         warn!("Receive the metadata data or reject message: {err:#}");
+        //         return Err(err.into());
+        //     }
+        // };
+        // debug!("<= msg = {msg}");
+        // if MessageId::Extended != msg.id {
+        //     let err = PeerError::WrongMessageId(MessageId::Extended, msg.id);
+        //     warn!("Receive the metadata data or reject message: {err:#}");
+        //     return Err(err.into());
+        // }
+        // let payload: ExtensionPayload = msg
+        //     .payload
+        //     .expect("Expected to have received the metadata data or reject message")
+        //     .try_into()?;
+        // eprintln!("<= payload = {payload}"); // todo rem
+        //                                      // eprintln!("<= total_size = {:?}", payload.payload.get("total_size".as_bytes())); // todo rem
+        //
+        // // TODO: Connect all lines.
+        //
+        // // The other peers should send our metadata ID in their responses.
+        // if UT_METADATA_ID != <u8>::from(payload.id.clone()) {
+        //     let err = PeerError::WrongExtendedMessageId(UT_METADATA_ID.try_into()?, payload.id);
+        //     warn!("Receive the extension handshake message: {err:#}");
+        //     return Err(err.into());
+        // }
+        //
+        // eprintln!("<= payload.dict = {:?}", payload.dict); // todo rem
+        //
+        // // let val: ExtensionMessage = serde_bencode::from_bytes(&payload.payload)?; // todo rem
+        // // eprintln!("<= val = {val:?}"); // todo rem
+        //
+        // // TODO: Perhaps in ExtensionPayload!
+        // // TODO: Differentiate between ExtensionMessageId::Data and ExtensionMessageId::Reject and add else. So, => match, but unify Request and Unsupported.
+        // // Todo: Reject doesn't contain total_size and contents. Data contains both.
+        //
+        // // Todo: search for "ee" in utf8_lossy representation of payload.payload. Both Data and Reject should have it.
+        // // Todo: Now, I can do that here or in ExtensionPayload - decide. Perhaps better in ExtensionPayload to remove that logic from here. We are doing a higher-level logic here.
+        //
+        // // todo: validate this piece's hash
+        //
+        // let len = payload.payload.len(); // todo: do properly! not here, perhaps?!
+        // eprintln!("<= len = {len}"); // todo rem
+        // let total_size = 91usize; // todo: extract total_size from payload.payload
+        // contents.extend(&payload.payload[len - total_size..][..]); // todo
     }
 
     // todo: calc full hash, validate it, and store it in Info?
