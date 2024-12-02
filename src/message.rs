@@ -21,7 +21,7 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
-use crate::bencode::decode_bencoded_value;
+use crate::bencode::{bencode_value, decode_bencoded_value};
 use crate::constants::MAX_FRAME_SIZE;
 use crate::errors::{MessageCodecError, MessageError, MessageIdError, PiecePayloadError};
 use crate::meta_info::Info;
@@ -29,7 +29,7 @@ use anyhow::{Context, Result};
 use bytes::{Buf, BufMut, BytesMut};
 use log::trace;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none};
+use serde_repr::*;
 use tokio_util::codec::{Decoder, Encoder};
 
 /// Message types
@@ -720,7 +720,8 @@ impl TryFrom<Vec<u8>> for ExtendedMessageHandshakeDict {
 /// Used for transferring of the info-dictionary part of the .torrent file, referred to as the metadata.
 ///
 /// See: https://www.bittorrent.org/beps/bep_0009.html#extension-message
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize_repr, PartialEq, Serialize_repr)]
+#[repr(u8)]
 pub enum ExtensionMessageId {
     /// Requests a piece of metadata from the peer
     Request = 0,
@@ -785,16 +786,16 @@ impl TryFrom<u8> for ExtensionMessageId {
 ///     - `total_size` is the length of the metadata piece (optional; contained only in the data messages).
 ///  - Metadata piece contents (variable size), in case of a data message only.
 ///
-/// This `struct` works with raw bytes for the payload (the dictionary and optional contents). // TODO: Should it, though?
+/// This `struct` works with raw bytes for the payload (the dictionary and optional contents). // TODO: Should it, though? Remove this line.
 ///
 /// See: https://www.bittorrent.org/beps/bep_0009.html#extension-message
-// #[skip_serializing_none] todo rem
 #[derive(Debug, Serialize)]
 pub struct ExtensionPayload {
     pub id: ExtendedMessageId,
     // pub payload: Vec<u8>, // todo rem
     dict: ExtensionMessage,
-    contents: Option<MetadataContents>,
+    contents: Option<Info>,
+    // contents: Option<MetadataContents>, // todo rem
 }
 
 impl Display for ExtensionPayload {
@@ -812,6 +813,8 @@ impl Display for ExtensionPayload {
             "{{ id: {:?}, dict: {}, contents: {} }}",
             self.id, self.dict, contents
         )
+
+        // write!(f, "{{ id: {:?}, dict: {} }}", self.id, self.dict) // todo rem
     }
 }
 
@@ -850,7 +853,7 @@ impl ExtensionPayload {
     /// Serializes `dict` into a bencode byte vector and stores it as such.
     pub fn new_request(id: ExtendedMessageId, piece_index: u32) -> Result<Self, MessageError> {
         let dict = ExtensionMessage {
-            msg_type: ExtensionMessageId::Request as u8,
+            msg_type: ExtensionMessageId::Request,
             piece: piece_index,
             total_size: None,
         };
@@ -883,13 +886,13 @@ impl TryFrom<ExtensionPayload> for Vec<u8> {
         } else {
             vec![]
         };
-        eprintln!("contents = {contents:?}"); // todo rem
+        eprintln!("-> contents = {contents:?}"); // todo rem
 
         let mut buf: Vec<u8> = Vec::with_capacity(1 + dict.len() + contents.len());
 
         buf.push(id);
         buf.extend(dict);
-        buf.extend(contents);
+        buf.extend(contents); // todo rem
 
         Ok(buf)
     }
@@ -901,10 +904,26 @@ impl TryFrom<Vec<u8>> for ExtensionPayload {
 
     /// Deserializes a byte stream received from a wire transfer into [`ExtensionPayload`].
     fn try_from(value: Vec<u8>) -> Result<ExtensionPayload, MessageError> {
+        // todo!()
         let id = value[0].try_into()?;
         let payload = value[1..].to_vec();
-        
-        Ok(ExtensionPayload { id, payload })
+
+        eprintln!(
+            "<= value 1 = {:?}",
+            String::from_utf8_lossy(&value[1..1 + 133 - 91])
+        ); // todo rem
+        let dict = serde_bencode::from_bytes(&payload[1..1 + 133 - 91])?; // todo: 91
+
+        eprintln!(
+            "<= value 2 = {:?}",
+            String::from_utf8_lossy(&value[1 + 133 - 91..])
+        ); // todo rem
+        let contents: Option<Info> = Some(bincode::deserialize(serde_bencode::from_bytes(
+            &value[1 + 133 - 91..],
+        )?)?); // todo: 91
+        eprintln!("<= contents = {contents:?}"); // todo rem
+
+        Ok(ExtensionPayload { id, dict, contents })
     }
 }
 
@@ -922,10 +941,9 @@ impl TryFrom<Vec<u8>> for ExtensionPayload {
 /// It is meant to be bencoded for a wire transfer.
 ///
 /// See: https://www.bittorrent.org/beps/bep_0009.html#extension-message
-// #[skip_serializing_none] todo rem
 #[derive(Debug, Deserialize, Serialize)]
 struct ExtensionMessage {
-    msg_type: u8,
+    msg_type: ExtensionMessageId,
     piece: u32,
     total_size: Option<u32>,
 }
@@ -940,7 +958,7 @@ impl Display for ExtensionMessage {
     }
 }
 
-// TODO: Maybe implement From and to ExtensionPayload.
+// TODO: Maybe implement From and to ExtensionPayload. But this probably isn't possible, as ExtensionMessage is only a subset of ExtensionPayload.
 
 // TODO: needed?
 // impl ExtensionMessage {
@@ -1011,26 +1029,25 @@ impl Display for ExtensionMessage {
 //     }
 // }
 
-// #[serde_as] todo rem
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct MetadataContents {
-    info: Info,
-
-    // #[serde_as(as = "Vec<_>")] todo rem
-    #[serde(with = "serde_bytes")]
-    binary_data: Vec<u8>,
-}
-
-impl Display for MetadataContents {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // todo: do we really want to see binary data?!
-        write!(
-            f,
-            "info: {:?}, binary data: {:?}",
-            self.info, self.binary_data
-        )
-    }
-}
+// todo: remove?
+// #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+// struct MetadataContents {
+//     info: Info,
+//
+//     #[serde(with = "serde_bytes")]
+//     binary_data: Vec<u8>,
+// }
+//
+// impl Display for MetadataContents {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         // todo: do we really want to see binary data?!
+//         write!(
+//             f,
+//             "info: {:?}, binary data: {:?}",
+//             self.info, self.binary_data
+//         )
+//     }
+// }
 
 // impl From<MetadataContents> for Vec<u8> {
 //     fn from(value: MetadataContents) -> Self {

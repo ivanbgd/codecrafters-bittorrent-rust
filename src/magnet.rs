@@ -313,9 +313,9 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
 
         // todo: validate this piece's hash
 
+        // let _total_size = metadata_size; // todo rem
         // let len = payload.payload.len(); // todo: do properly! not here, perhaps?!
         // eprintln!("<= len = {len}"); // todo rem
-        // let total_size = 91usize; // todo: extract total_size from payload.payload
         // contents.extend(&payload.payload[len - total_size..][..]); // todo
     }
 
