@@ -794,24 +794,24 @@ pub struct ExtensionPayload {
     pub id: ExtendedMessageId,
     // pub payload: Vec<u8>, // todo rem
     dict: ExtensionMessage,
-    contents: Option<Info>,
+    info: Option<Info>,
     // contents: Option<MetadataContents>, // todo rem
 }
 
 impl Display for ExtensionPayload {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let contents = if let Some(contents) = &self.contents {
-            contents.to_string()
+        let info = if let Some(info) = &self.info {
+            info.to_string()
         } else {
             "None".to_string()
         };
         // todo: try both variants
-        // let contents = self.contents.clone().unwrap_or_default();
+        // let info = self.info.clone().unwrap_or_default();
 
         write!(
             f,
-            "{{ id: {:?}, dict: {}, contents: {} }}",
-            self.id, self.dict, contents
+            "{{ id: {:?}, dict: {}, info: {} }}",
+            self.id, self.dict, info
         )
 
         // write!(f, "{{ id: {:?}, dict: {} }}", self.id, self.dict) // todo rem
@@ -853,7 +853,7 @@ impl ExtensionPayload {
     /// Serializes `dict` into a bencode byte vector and stores it as such.
     pub fn new_request(id: ExtendedMessageId, piece_index: u32) -> Result<Self, MessageError> {
         let dict = ExtensionMessage {
-            msg_type: ExtensionMessageId::Request,
+            msg_type: ExtensionMessageId::Request, // todo: rem as u8
             piece: piece_index,
             total_size: None,
         };
@@ -867,7 +867,7 @@ impl ExtensionPayload {
         Ok(Self {
             id,
             dict,
-            contents: None,
+            info: None,
         })
     }
 }
@@ -881,7 +881,7 @@ impl TryFrom<ExtensionPayload> for Vec<u8> {
         let id = value.id.into();
         let dict = serde_bencode::to_bytes(&value.dict)?;
         // let contents = value.contents.unwrap_or_default(); // todo: see if default makes sense - perhaps it doesn't, and in that case remove Default from everywhere you put it
-        let contents = if let Some(contents) = value.contents {
+        let contents = if let Some(contents) = value.info {
             bincode::serialize(&contents)?
         } else {
             vec![]
@@ -912,18 +912,47 @@ impl TryFrom<Vec<u8>> for ExtensionPayload {
             "<= value 1 = {:?}",
             String::from_utf8_lossy(&value[1..1 + 133 - 91])
         ); // todo rem
-        let dict = serde_bencode::from_bytes(&payload[1..1 + 133 - 91])?; // todo: 91
+           // todo: this is failing!
+           // let dict = serde_bencode::from_bytes(&payload[1..1 + 133 - 91])?; // todo: 91
+           // let aux = b"d3:foo3:bar5:helloi52ee";
+           // let dict = decode_bencoded_value(&payload[1..1 + 133 - 91])?; // todo: 91
+        let dict = b"d8:msg_typei1e5:piecei0e10:total_sizei91ee";
+        eprintln!("dict = {}", String::from_utf8_lossy(dict)); //todo rem
+        let dict = decode_bencoded_value(dict)?; // todo rem
+                                                 // let dict = serde_bencode::from_bytes(aux.as_bytes())?; // todo: rem
+        eprintln!("<= dict = {dict}"); // todo rem
+                                       // eprintln!("<= dict = {:?}", dict.as_object().unwrap()); // todo rem
+        let dict: ExtensionMessage = serde_json::from_value(dict)?;
+        // let dict = ExtensionMessage {
+        //     msg_type: 0,
+        //     piece: 0,
+        //     total_size: Some(0),
+        // }; //todo rem
+        eprintln!("<= dict = {dict:?}"); // todo rem
+        eprintln!("<= dict.msg_type = {:?}", dict.msg_type); // todo rem
 
         eprintln!(
             "<= value 2 = {:?}",
             String::from_utf8_lossy(&value[1 + 133 - 91..])
         ); // todo rem
-        let contents: Option<Info> = Some(bincode::deserialize(serde_bencode::from_bytes(
-            &value[1 + 133 - 91..],
-        )?)?); // todo: 91
-        eprintln!("<= contents = {contents:?}"); // todo rem
+           // let info: Option<Info> = Some(bincode::deserialize(serde_bencode::from_bytes(
+           //     &value[1 + 133 - 91..],
+           // )?)?); // todo: 91
+        let info = b"d6:lengthi79752e4:name11:magnet2.gif12:piece lengthi262144e6:pieces20:ZZZZZZZZZZZZZZZZZZ12e";
+        eprintln!("<= info 1 = {}", String::from_utf8_lossy(info)); // todo rem
+        let info = decode_bencoded_value(&info)?;
+        eprintln!("<= info 2 = {}", info); // todo rem
+                                           // let info: Info = serde_json::from_value(info)?;
+                                           // epr
+                                           //intln!("<= info 3 = {}", info); // todo rem
+        let info: Option<Info> = Some(bincode::deserialize(info)?); // todo: 91
+        eprintln!("<= info 4 = {:?}", info); // todo rem
 
-        Ok(ExtensionPayload { id, dict, contents })
+        Ok(ExtensionPayload {
+            id,
+            dict,
+            info: None,
+        })
     }
 }
 
@@ -943,7 +972,7 @@ impl TryFrom<Vec<u8>> for ExtensionPayload {
 /// See: https://www.bittorrent.org/beps/bep_0009.html#extension-message
 #[derive(Debug, Deserialize, Serialize)]
 struct ExtensionMessage {
-    msg_type: ExtensionMessageId,
+    msg_type: ExtensionMessageId, // todo: revert to ExtensionMessageId
     piece: u32,
     total_size: Option<u32>,
 }
