@@ -24,10 +24,12 @@ use std::fmt::{Display, Formatter};
 use crate::bencode::decode_bencoded_value;
 use crate::constants::MAX_FRAME_SIZE;
 use crate::errors::{MessageCodecError, MessageError, MessageIdError, PiecePayloadError};
+use crate::meta_info::Info;
 use anyhow::{Context, Result};
 use bytes::{Buf, BufMut, BytesMut};
 use log::trace;
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, skip_serializing_none};
 use tokio_util::codec::{Decoder, Encoder};
 
 /// Message types
@@ -558,7 +560,7 @@ impl Display for ExtendedMessageHandshakePayload {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{{ id: {:?}, payload: {:?} }}",
+            "{{ id: {:?}, dict: {:?} }}",
             self.id,
             String::from_utf8_lossy(&self.dict)
         )
@@ -718,7 +720,7 @@ impl TryFrom<Vec<u8>> for ExtendedMessageHandshakeDict {
 /// Used for transferring of the info-dictionary part of the .torrent file, referred to as the metadata.
 ///
 /// See: https://www.bittorrent.org/beps/bep_0009.html#extension-message
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub enum ExtensionMessageId {
     /// Requests a piece of metadata from the peer
     Request = 0,
@@ -786,59 +788,114 @@ impl TryFrom<u8> for ExtensionMessageId {
 /// This `struct` works with raw bytes for the payload (the dictionary and optional contents). // TODO: Should it, though?
 ///
 /// See: https://www.bittorrent.org/beps/bep_0009.html#extension-message
+// #[skip_serializing_none] todo rem
 #[derive(Debug, Serialize)]
 pub struct ExtensionPayload {
     pub id: ExtendedMessageId,
-    // TODO: Perhaps convert payload vec to ExtensionMessage and add optional contents. Contents are Info! So, name them info: Info.
-    pub payload: Vec<u8>,
+    // pub payload: Vec<u8>, // todo rem
+    dict: ExtensionMessage,
+    contents: Option<MetadataContents>,
 }
 
 impl Display for ExtensionPayload {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let contents = if let Some(contents) = &self.contents {
+            contents.to_string()
+        } else {
+            "None".to_string()
+        };
+        // todo: try both variants
+        // let contents = self.contents.clone().unwrap_or_default();
+
         write!(
             f,
-            "{{ id: {:?}, payload: {:?} }}",
-            self.id,
-            String::from_utf8_lossy(&self.payload)
+            "{{ id: {:?}, dict: {}, contents: {} }}",
+            self.id, self.dict, contents
         )
     }
 }
 
 impl ExtensionPayload {
+    // TODO: rem, probably not needed
+    // /// Creates a new extension request payload consisting of the peer's extension `id`,
+    // /// message type (request, data or reject), piece index and total size of the piece.
+    // ///
+    // /// Serializes `dict` into a bencode byte vector and stores it as such.
+    // pub fn new(
+    //     id: ExtendedMessageId,
+    //     msg_type: ExtensionMessageId,
+    //     piece_index: u32,
+    //     total_size: Option<u32>,
+    // ) -> Result<Self, MessageError> {
+    //     let dict = ExtensionMessage {
+    //         msg_type,
+    //         piece: piece_index,
+    //         total_size,
+    //     };
+    //
+    //     // let dict = HashMap::from([ // todo rem
+    //     //     ("msg_type".to_string(), ExtensionMessageId::Request.into()),
+    //     //     ("piece".to_string(), piece_index),
+    //     // ]);
+    //     // let dict = serde_bencode::to_bytes(&dict)?;
+    //
+    //     Ok(Self { id, dict })
+    // }
+
     /// Creates a new extension request payload consisting of the peer's extension id and piece index.
     ///
-    /// This is meant only for creating requests, because message type is internally fixed
-    /// to [`ExtensionMessageId::Request`].
+    /// This is meant only for creating requests, because message type is fixed
+    /// to [`ExtensionMessageId::Request`] internally.
     ///
     /// Serializes `dict` into a bencode byte vector and stores it as such.
-    pub fn new_request(id: ExtendedMessageId, piece_index: usize) -> Result<Self, MessageError> {
-        let dict = HashMap::from([
-            ("msg_type".to_string(), ExtensionMessageId::Request.into()),
-            ("piece".to_string(), piece_index),
-        ]);
-        let dict = serde_bencode::to_bytes(&dict)?;
+    pub fn new_request(id: ExtendedMessageId, piece_index: u32) -> Result<Self, MessageError> {
+        let dict = ExtensionMessage {
+            msg_type: ExtensionMessageId::Request as u8,
+            piece: piece_index,
+            total_size: None,
+        };
 
-        Ok(Self { id, payload: dict })
+        // let dict = HashMap::from([
+        //     ("msg_type".to_string(), ExtensionMessageId::Request.into()),
+        //     ("piece".to_string(), piece_index),
+        // ]); // todo rem
+        // let dict = serde_bencode::to_bytes(&dict)?;
+
+        Ok(Self {
+            id,
+            dict,
+            contents: None,
+        })
     }
 }
 
 /// Converts an [`ExtensionPayload`] into a byte stream.
-impl From<ExtensionPayload> for Vec<u8> {
-    /// Serializes an [`ExtensionPayload`] for a send transfer over the wire.
-    fn from(value: ExtensionPayload) -> Vec<u8> {
-        let id = value.id.into();
-        let payload = value.payload;
+impl TryFrom<ExtensionPayload> for Vec<u8> {
+    type Error = MessageError;
 
-        let mut buf: Vec<u8> = Vec::with_capacity(1 + payload.len());
+    /// Serializes an [`ExtensionPayload`] for a send transfer over the wire.
+    fn try_from(value: ExtensionPayload) -> Result<Vec<u8>, MessageError> {
+        let id = value.id.into();
+        let dict = serde_bencode::to_bytes(&value.dict)?;
+        // let contents = value.contents.unwrap_or_default(); // todo: see if default makes sense - perhaps it doesn't, and in that case remove Default from everywhere you put it
+        let contents = if let Some(contents) = value.contents {
+            bincode::serialize(&contents)?
+        } else {
+            vec![]
+        };
+        eprintln!("contents = {contents:?}"); // todo rem
+
+        let mut buf: Vec<u8> = Vec::with_capacity(1 + dict.len() + contents.len());
 
         buf.push(id);
-        buf.extend(payload);
+        buf.extend(dict);
+        buf.extend(contents);
 
-        buf
+        Ok(buf)
     }
 }
 
-/// Converts a byte stream into a [`ExtensionPayload`].
+/// Converts a byte stream into [`ExtensionPayload`].
 impl TryFrom<Vec<u8>> for ExtensionPayload {
     type Error = MessageError;
 
@@ -846,7 +903,7 @@ impl TryFrom<Vec<u8>> for ExtensionPayload {
     fn try_from(value: Vec<u8>) -> Result<ExtensionPayload, MessageError> {
         let id = value[0].try_into()?;
         let payload = value[1..].to_vec();
-
+        
         Ok(ExtensionPayload { id, payload })
     }
 }
@@ -865,9 +922,10 @@ impl TryFrom<Vec<u8>> for ExtensionPayload {
 /// It is meant to be bencoded for a wire transfer.
 ///
 /// See: https://www.bittorrent.org/beps/bep_0009.html#extension-message
-#[derive(Debug, Deserialize)]
+// #[skip_serializing_none] todo rem
+#[derive(Debug, Deserialize, Serialize)]
 struct ExtensionMessage {
-    msg_type: ExtensionMessageId,
+    msg_type: u8,
     piece: u32,
     total_size: Option<u32>,
 }
@@ -952,3 +1010,32 @@ impl Display for ExtensionMessage {
 //         // })
 //     }
 // }
+
+// #[serde_as] todo rem
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct MetadataContents {
+    info: Info,
+
+    // #[serde_as(as = "Vec<_>")] todo rem
+    #[serde(with = "serde_bytes")]
+    binary_data: Vec<u8>,
+}
+
+impl Display for MetadataContents {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // todo: do we really want to see binary data?!
+        write!(
+            f,
+            "info: {:?}, binary data: {:?}",
+            self.info, self.binary_data
+        )
+    }
+}
+
+// impl From<MetadataContents> for Vec<u8> {
+//     fn from(value: MetadataContents) -> Self {
+//         todo!()
+//     }
+// }
+
+// TODO: Impl From <-> Vec<u8>, in one or both ways?

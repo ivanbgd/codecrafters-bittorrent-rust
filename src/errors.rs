@@ -89,6 +89,9 @@ pub enum MessageError {
     SerdeJson(#[from] serde_json::Error),
 
     #[error(transparent)]
+    Bincode(#[from] Box<bincode::ErrorKind>),
+
+    #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
 

@@ -256,11 +256,11 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
     //
     // The metadata is handled in blocks of 16 KiB (16384 Bytes). The metadata blocks are indexed starting at 0.
     // All blocks are 16 KiB except the last block which may be smaller.
-    for piece_index in 0..num_pcs {
+    for piece_index in 0..num_pcs as u32 {
         // -> Send the metadata request message
         let payload =
             ExtensionPayload::new_request(ExtendedMessageId::Custom(extension_id), piece_index)?;
-        let msg = Message::new(MessageId::Extended, Some(payload.into()));
+        let msg = Message::new(MessageId::Extended, Some(payload.try_into()?));
         debug!("-> msg = {msg}");
         peer.feed(msg)
             .await
@@ -299,10 +299,7 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
             return Err(err.into());
         }
 
-        eprintln!(
-            "<= payload.payload = {:?}",
-            String::from_utf8_lossy(&payload.payload)
-        ); // todo rem
+        // eprintln!("<= payload.dict = {:?}", payload.dict); // todo rem
 
         // let val: ExtensionMessage = serde_bencode::from_bytes(&payload.payload)?; // todo rem
         // eprintln!("<= val = {val:?}"); // todo rem
@@ -316,10 +313,10 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
 
         // todo: validate this piece's hash
 
-        let len = payload.payload.len(); // todo: do properly!
-        eprintln!("<= len = {len}"); // todo rem
-        let total_size = 91usize; // todo: extract total_size from payload.payload
-        contents.extend(&payload.payload[len - total_size..][..]); // todo
+        // let len = payload.payload.len(); // todo: do properly! not here, perhaps?!
+        // eprintln!("<= len = {len}"); // todo rem
+        // let total_size = 91usize; // todo: extract total_size from payload.payload
+        // contents.extend(&payload.payload[len - total_size..][..]); // todo
     }
 
     // todo: calc full hash, validate it, and store it in Info?
