@@ -21,20 +21,17 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
-use crate::bencode::{bencode_value, decode_bencoded_value};
-use crate::constants::{HashType, MAX_FRAME_SIZE};
-use crate::errors::{
-    MagnetError, MessageCodecError, MessageError, MessageIdError, PeerError, PiecePayloadError,
-};
-use crate::meta_info::Info;
 use anyhow::{Context, Result};
 use bytes::{Buf, BufMut, BytesMut};
-use log::{trace, warn};
+use log::trace;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use serde_repr::*;
-use sha1::{Digest, Sha1};
 use tokio_util::codec::{Decoder, Encoder};
+
+use crate::bencode::decode_bencoded_value;
+use crate::constants::MAX_FRAME_SIZE;
+use crate::errors::{MessageCodecError, MessageError, MessageIdError, PiecePayloadError};
+use crate::meta_info::Info;
 
 /// Message types
 ///
@@ -805,16 +802,12 @@ impl Display for ExtensionPayload {
         } else {
             "None".to_string()
         };
-        // todo: try both variants
-        // let info = self.info.clone().unwrap_or_default();
 
         write!(
             f,
-            "{{ id: {:?}, dict: {}, info: {} }}",
+            "{{999999 id: {:?}, dict: {}, info: {} }}",
             self.id, self.dict, info
         )
-
-        // write!(f, "{{ id: {:?}, dict: {} }}", self.id, self.dict) // todo rem
     }
 }
 
@@ -827,7 +820,7 @@ impl ExtensionPayload {
     /// Serializes `dict` into a bencode byte vector and stores it as such.
     pub fn new_request(id: ExtendedMessageId, piece_index: u32) -> Result<Self, MessageError> {
         let dict = ExtensionMessage {
-            msg_type: ExtensionMessageId::Request, // todo: rem as u8
+            msg_type: ExtensionMessageId::Request,
             piece: piece_index,
             total_size: None,
         };
@@ -838,17 +831,6 @@ impl ExtensionPayload {
             info: None,
         })
     }
-
-    // TODO rem
-    // /// Deserializes a byte stream received from a wire transfer into [`ExtensionPayload`].
-    // pub fn from_bytes(
-    //     value: &[u8],
-    //     metadata_size: usize,
-    // ) -> Result<ExtensionPayload, MessageError> {
-    //     let id = value[0].try_into()?;
-    //     let payload = &value[1..];
-    //     let payload_len = payload.len();
-    // }
 }
 
 /// Converts an [`ExtensionPayload`] into a byte stream.
@@ -873,88 +855,9 @@ impl TryFrom<ExtensionPayload> for Vec<u8> {
     }
 }
 
-// todo rem?
-/// Converts a byte stream into [`ExtensionPayload`].
-impl TryFrom<Vec<u8>> for ExtensionPayload {
-    type Error = MessageError;
-
-    /// Deserializes a byte stream received from a wire transfer into [`ExtensionPayload`].
-    fn try_from(value: Vec<u8>) -> Result<ExtensionPayload, MessageError> {
-        // todo!()
-        let id = value[0].try_into()?;
-        let payload = &value[1..];
-
-        let payload_len = payload.len();
-        let info_len = 0usize;
-
-        // TODO: This acrobatic logic is NOT correct!!!
-        // It is correct for the first piece only, but not for other pieces!!!
-        // I'll have to do this outside of this function... :/ Good thing is I have metadata_size there, which is total_size.
-
-        eprintln!(
-            "<= value 1 = {:?}",
-            String::from_utf8_lossy(&payload[..payload_len - info_len])
-        ); // todo rem
-           // todo: this is failing!
-           // let dict: ExtensionMessage = serde_bencode::from_bytes(&payload[1..1 + 133 - 91])?; // todo: 91
-           // let aux = b"d3:foo3:bar5:helloi52ee";
-           // let dict = decode_bencoded_value(&payload[1..1 + 133 - 91])?; // todo: 91
-           // let dict = b"d8:msg_typei1e5:piecei0e10:total_sizei91ee";
-           // eprintln!("dict = {:?}", String::from_utf8_lossy(dict)); //todo rem
-           // let dict = decode_bencoded_value(dict)?; // todo rem
-           // let dict = serde_bencode::from_bytes(aux.as_bytes())?; // todo: rem
-           // eprintln!("<= dict = {:?}", dict.as_object().unwrap()); // todo rem
-
-        let dict = &payload[..payload_len - 91];
-        eprintln!("<= dict 1 = {}", String::from_utf8_lossy(dict)); // todo rem
-        let dict = decode_bencoded_value(dict)?;
-        eprintln!("<= dict 2 = {dict:?}"); // todo rem
-        let dict: ExtensionMessage = serde_json::from_value(dict)?;
-        // let dict = ExtensionMessage {
-        //     msg_type: 0,
-        //     piece: 0,
-        //     total_size: Some(0),
-        // }; //todo rem
-        eprintln!("<= dict 3 = {dict:?}"); // todo rem
-        eprintln!("<= dict.msg_type = {:?}", dict.msg_type); // todo rem
-
-        eprintln!(
-            "<= value 2 = {:?}",
-            String::from_utf8_lossy(&payload[payload_len - 91..])
-        ); // todo rem
-           // let info: Option<Info> = Some(bincode::deserialize(serde_bencode::from_bytes(
-           //     &value[1 + 133 - 91..],
-           // )?)?); // todo: 91
-           // let info = b"d6:lengthi79752e4:name11:magnet2.gif12:piece lengthi262144e6:pieces20:ZZZZZZZZZZZZZZZZZZ12e";
-        let info = &payload[payload_len - 91..];
-        eprintln!("<= info 1 = {}", String::from_utf8_lossy(info)); // todo rem
-        let pieces = &info[info.len() - 1 * 20 - 1..info.len() - 1]; // todo rem
-        eprintln!("<= pieces 1 = {:?}", String::from_utf8_lossy(pieces)); // todo rem
-                                                                          // let pieces = hex::decode(pieces).unwrap();
-                                                                          // eprintln!("<= pieces 2 = {:?}", pieces); // todo rem
-
-        let info_hash: HashType = *Sha1::digest(info).as_ref();
-        let info_hash_hex = hex::encode(info_hash);
-
-        let mut info: Info = serde_bencode::from_bytes(info)?;
-        eprintln!("<= info 2 = {}", info); // todo rem
-                                           // let info: Info = serde_json::from_value(info)?;
-                                           // eprintln!("<= info 3 = {}", info); // todo rem
-                                           // let info: Option<Info> = Some(bincode::deserialize(info)?); // todo: rem
-                                           // eprintln!("<= info 4 = {:?}", info); // todo rem
-
-        info.info_hash = info_hash;
-        info.info_hash_hex = info_hash_hex;
-        eprintln!("<= info 3 = {}", info); // todo rem
-        let info = Some(info);
-
-        Ok(ExtensionPayload { id, dict, info })
-    }
-}
-
 /// Extension message - part of [`ExtensionPayload`]
 ///
-/// It is used in both ways: for requesting and getting metadata from a peer.
+/// It was designed to be used in both ways: for requesting and getting metadata from a peer.
 ///
 /// The Extension message is structured as follows:
 /// - `{'msg_type': 0, 'piece': 0}` or `{'msg_type': 1, 'piece': 0, 'total_size': 3425}`
@@ -983,99 +886,15 @@ impl Display for ExtensionMessage {
     }
 }
 
-// TODO: Maybe implement From and to ExtensionPayload. But this probably isn't possible, as ExtensionMessage is only a subset of ExtensionPayload.
-
-// TODO: needed?
-// impl ExtensionMessage {
-//     /// Creates a new extension message.
-//     ///
-//     /// This is meant only for creating requests,
-//     /// because message type is internally fixed to [`ExtensionMessageId::Request`].
-//     ///
-//     /// Serializes `dict` into a bencode byte vector and stores it as such.
-//     pub fn new(id: ExtensionMessageId, piece_index: usize) -> Result<Self, MessageError> {
-//         let dict = HashMap::from([
-//             ("msg_type".to_string(), ExtensionMessageId::Request.into()),
-//             ("piece".to_string(), piece_index),
-//         ]);
-//         let dict = serde_bencode::to_bytes(&dict)?;
-//
-//         Ok(Self { id, dict })
-//     }
-// }
-
-// TODO: needed? Is it correct at all?!
-// /// Converts an [`ExtensionMessage`] into a byte stream (bencoded).
-// impl From<ExtensionMessage> for Vec<u8> {
-//     /// Serializes an [`ExtensionMessage`] for a send transfer over the wire (bencoded).
-//     fn from(value: ExtensionMessage) -> Vec<u8> {
-//         let msg_type = value.msg_type.into();
-//         let piece = u32::to_be_bytes(value.piece);
-//         let total_size = u32::to_be_bytes(value.total_size.unwrap_or_default());
-//         eprintln!("-> total_size = {total_size:?}, len = {}", total_size.len()); // todo rem
-//
-//         let mut buf: Vec<u8> = Vec::with_capacity(1 + 4 + total_size.len());
-//
-//         buf.push(msg_type);
-//         buf.extend(piece);
-//         buf.extend(total_size);
-//
-//         let buf = serde_bencode::to_bytes(&buf).unwrap(); // todo: unwrap -> ?
-//         eprintln!("-> buf = {buf:?}, len = {}", buf.len()); // todo rem
-//
-//         buf
-//     }
-// }
-
-// TODO: needed?
 /// Converts a bencoded byte stream into an [`ExtensionMessage`].
 impl TryFrom<&[u8]> for ExtensionMessage {
     type Error = MessageError;
 
     /// Deserializes a bencoded byte stream received from a wire transfer into [`ExtensionMessage`].
     fn try_from(value: &[u8]) -> Result<ExtensionMessage, MessageError> {
-        eprintln!(
-            "<= value = {}, len = {}",
-            String::from_utf8(value.to_vec()).unwrap(),
-            value.len()
-        ); // todo rem
-
-        // let val: ExtensionMessage = serde_bencode::from_bytes(value)?;
-        // eprintln!("<= val = {val:?}"); // todo rem
-
         let dict = decode_bencoded_value(value)?;
-        eprintln!("<= dict 2 = {dict:?}"); // todo rem
         let dict: ExtensionMessage = serde_json::from_value(dict)?;
-        eprintln!("<= dict 3 = {dict:?}"); // todo rem
-        eprintln!("<= dict.msg_type = {:?}", dict.msg_type); // todo rem
 
         Ok(dict)
     }
 }
-
-// // TODO: needed?
-// /// Converts a bencoded byte stream into an [`ExtensionMessage`].
-// impl TryFrom<Vec<u8>> for ExtensionMessage {
-//     type Error = MessageError;
-//
-//     /// Deserializes a bencoded byte stream received from a wire transfer into [`ExtensionMessage`].
-//     fn try_from(value: Vec<u8>) -> Result<ExtensionMessage, MessageError> {
-//         eprintln!("<= value = {value:?}, len = {}", value.len()); // todo rem
-//
-//         let val: ExtensionMessage = serde_bencode::from_bytes(&value)?;
-//         eprintln!("<= val = {val:?}"); // todo rem
-//
-//         Ok(val)
-//
-//         // let msg_type = value[0].try_into()?;
-//         // let piece = u32::from_be_bytes(value[1..5].try_into().context("failed to convert piece")?);
-//         // let total_size = None;
-//         // eprintln!("<= total_size = {total_size:?}"); // todo rem
-//         //
-//         // Ok(ExtensionMessage {
-//         //     msg_type,
-//         //     piece,
-//         //     total_size,
-//         // })
-//     }
-// }

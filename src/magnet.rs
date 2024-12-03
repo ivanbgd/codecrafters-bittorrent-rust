@@ -98,7 +98,7 @@ use crate::constants::{
     HashType, BLOCK_SIZE, CLIENT_NAME, COMPACT, DOWNLOADED, PEER_ID, PORT, SHA1_LEN, UPLOADED,
     UT_METADATA, UT_METADATA_ID,
 };
-use crate::errors::{MagnetError, MessageError, PeerError};
+use crate::errors::{MagnetError, PeerError};
 use crate::magnet::magnet_link::MagnetLink;
 use crate::message::{
     ExtendedMessageHandshakeDict, ExtendedMessageHandshakePayload, ExtendedMessageId,
@@ -215,7 +215,6 @@ pub async fn magnet_handshake(magnet_link: &str) -> Result<Peer, MagnetError> {
             .payload
             .expect("Expected to have received the extension handshake message")
             .try_into()?;
-        eprintln!("<= payload = {payload}"); // todo rem
         if ExtendedMessageId::Handshake != payload.id {
             let err = PeerError::WrongExtendedMessageId(ExtendedMessageId::Handshake, payload.id);
             warn!("Receive the extension handshake message: {err:#}");
@@ -223,12 +222,8 @@ pub async fn magnet_handshake(magnet_link: &str) -> Result<Peer, MagnetError> {
         }
         let dict: ExtendedMessageHandshakeDict = payload.dict.try_into()?;
         trace!("<= mhs payload.dict = {}", dict);
-        eprintln!(
-            "<= m = {:?}",
-            dict.m.clone().expect("Expected field \"m\".")
-        ); // todo rem
+
         peer.set_extension_dict(dict);
-        // trace!("peer = {:?}", peer);
         trace!("peer.extension_dict = {:?}", peer.get_extension_dict());
     }
     // Note that the extension handshake message is only sent if the other peer supports extensions
@@ -304,12 +299,6 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
 
         // The first byte is reserved for ExtendedMessageId, so skip it.
         let dict = &dict[1..];
-        eprintln!(
-            "{} {}; {}",
-            String::from_utf8(dict.to_vec()).unwrap(),
-            dict.len(),
-            info.len()
-        );
         let dict: ExtensionMessage = dict.try_into()?;
         if dict.msg_type == ExtensionMessageId::Reject {
             let err = MagnetError::Reject(peer.addr);
@@ -320,16 +309,9 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
         metadata.extend(info);
     }
 
-    let info_hash: HashType = *Sha1::digest(&metadata).as_ref();
-    let info_hash_hex = hex::encode(info_hash);
-
     let mut info: Info = serde_bencode::from_bytes(&metadata)?;
-    info.info_hash = info_hash;
-    info.info_hash_hex = info_hash_hex;
-
-    // let payload: ExtensionPayload = metadata.try_into()?;
-    // let info = payload.info.unwrap(); // todo: ok_or()
-    //                                   // let info: Info = serde_json::from_value(info).unwrap(); // todo: unwrap
+    info.info_hash = *Sha1::digest(&metadata).as_ref();
+    info.info_hash_hex = hex::encode(info.info_hash);
 
     // Validate hash
     let hash_from_magnet_link = parse_magnet_link(magnet_link)?.xt;
@@ -339,9 +321,6 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
         warn!("{err:#}");
         return Err(err);
     }
-
-    eprintln!("<= info = {}", &info); // todo rem
-    eprintln!("<= info = {:?}", &info); // todo rem
 
     Ok(info)
 }
