@@ -173,12 +173,20 @@ pub struct Info {
 
 impl Display for Info {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let info_hash = unsafe { String::from_utf8_unchecked(self.info_hash.to_vec()) }; // todo: lossy?
+        // let info_hash = String::from_utf8_lossy(&self.info_hash);
+        //
+        // write!(
+        //     f,
+        //     "Info {{ mode: {:?}, plen: {}, pieces: {}, name: {}, info_hash: {}, info_hash_hex: {} }}",
+        //     self.mode, self.plen, self.pieces, self.name, info_hash, self.info_hash_hex
+        // )
 
-        write!(
+        writeln!(
             f,
-            "Info {{ mode: {:?}, plen: {}, pieces: {}, name: {}, info_hash: {}, info_hash_hex: {} }}",
-            self.mode, self.plen, self.pieces, self.name, info_hash, self.info_hash_hex
+            "Length: {}\nPiece Length: {}\nPiece Hashes:\n{}",
+            self.length(),
+            self.plen,
+            self.pieces
         )
     }
 }

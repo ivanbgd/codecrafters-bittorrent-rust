@@ -262,6 +262,9 @@ pub enum MagnetError {
     #[error(transparent)]
     MessageIdErr(#[from] MessageIdError),
 
+    #[error("Hash mismatch: expected {0}, calculated {1}")]
+    HashMismatch(String, String),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

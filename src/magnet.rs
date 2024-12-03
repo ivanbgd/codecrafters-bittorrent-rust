@@ -283,21 +283,28 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
             warn!("Receive the metadata data or reject message: {err:#}");
             return Err(err.into());
         }
-        let payload: ExtensionPayload = msg
+        let payload = msg
             .payload
-            .expect("Expected to have received the metadata data or reject message")
-            .try_into()?;
-        eprintln!("<= payload = {payload}"); // todo rem
-                                             // eprintln!("<= total_size = {:?}", payload.payload.get("total_size".as_bytes())); // todo rem
+            .expect("Expected to have received the metadata data or reject message");
+        contents.extend(&payload);
+        eprintln!("<= payload = {payload:?}"); // todo rem
+                                               // let pl = payload.info.unwrap();
+                                               // eprintln!("<= pl.info = {}", pl); // todo rem
+                                               // eprintln!("<= pl.info.pieces = {}", pl.get("pieces").unwrap()); // todo: improve; ok_or(), ...
+                                               // eprintln!("<= total_size = {:?}", payload.payload.get("total_size".as_bytes())); // todo rem
 
         // TODO: Connect all lines.
 
+        // TODO: This slows things down, because we need to convert each piece just for this check. Perhaps keep it with this comment.
         // The other peers should send our metadata ID in their responses.
-        if UT_METADATA_ID != <u8>::from(payload.id.clone()) {
-            let err = PeerError::WrongExtendedMessageId(UT_METADATA_ID.try_into()?, payload.id);
-            warn!("Receive the extension handshake message: {err:#}");
-            return Err(err.into());
-        }
+        // if UT_METADATA_ID != <u8>::from(payload.id.clone()) {
+        //     let err = PeerError::WrongExtendedMessageId(UT_METADATA_ID.try_into()?, payload.id);
+        //     warn!("Receive the metadata data or reject message: {err:#}");
+        //     return Err(err.into());
+        // }
+
+        // The peer (sender) must have checked the metadata hash, per specification.
+        // We cannot check piece hashes.
 
         // eprintln!("<= payload.dict = {:?}", payload.dict); // todo rem
 
@@ -311,16 +318,27 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
         // Todo: search for "ee" in utf8_lossy representation of payload.payload. Both Data and Reject should have it.
         // Todo: Now, I can do that here or in ExtensionPayload - decide. Perhaps better in ExtensionPayload to remove that logic from here. We are doing a higher-level logic here.
 
-        // todo: validate this piece's hash
-
         // let _total_size = metadata_size; // todo rem
         // let len = payload.payload.len(); // todo: do properly! not here, perhaps?!
         // eprintln!("<= len = {len}"); // todo rem
         // contents.extend(&payload.payload[len - total_size..][..]); // todo
     }
 
-    // todo: calc full hash, validate it, and store it in Info?
-    let info: Info = serde_bencode::from_bytes(&contents)?;
+    let payload: ExtensionPayload = contents.try_into()?;
+    let info = payload.info.unwrap(); // todo: ok_or()
+                                      // let info: Info = serde_json::from_value(info).unwrap(); // todo: unwrap
+
+    // Validate hash
+    let hash_from_magnet_link = parse_magnet_link(magnet_link)?.xt;
+    let calculated_info_hash = &info.info_hash_hex;
+    if hash_from_magnet_link != *calculated_info_hash {
+        let err = PeerError::HashMismatch(hash_from_magnet_link, calculated_info_hash.clone());
+        warn!("{err:#}");
+        return Err(err.into());
+    }
+
+    // let info: Info = serde_bencode::from_bytes(&contents)?;
+    eprintln!("<= info = {}", &info); // todo rem
     eprintln!("<= info = {:?}", &info); // todo rem
 
     Ok(info)
