@@ -288,12 +288,12 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
             .expect("Expected to have received the metadata data or reject message");
         contents.extend(&payload);
         eprintln!("<= payload = {payload:?}"); // todo rem
-                                               // let pl = payload.info.unwrap();
+                                               // let pl = payload.info.unwrap(); // todo rem
                                                // eprintln!("<= pl.info = {}", pl); // todo rem
-                                               // eprintln!("<= pl.info.pieces = {}", pl.get("pieces").unwrap()); // todo: improve; ok_or(), ...
+                                               // eprintln!("<= pl.info.pieces = {}", pl.get("pieces").unwrap()); // todo: rem! improve; ok_or(), ...
                                                // eprintln!("<= total_size = {:?}", payload.payload.get("total_size".as_bytes())); // todo rem
 
-        // TODO: Connect all lines.
+        // TODO: Connect all lines together.
 
         // TODO: This slows things down, because we need to convert each piece just for this check. Perhaps keep it with this comment.
         // The other peers should send our metadata ID in their responses.
@@ -303,15 +303,12 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
         //     return Err(err.into());
         // }
 
-        // The peer (sender) must have checked the metadata hash, per specification.
-        // We cannot check piece hashes.
-
         // eprintln!("<= payload.dict = {:?}", payload.dict); // todo rem
 
         // let val: ExtensionMessage = serde_bencode::from_bytes(&payload.payload)?; // todo rem
         // eprintln!("<= val = {val:?}"); // todo rem
 
-        // TODO: Perhaps in ExtensionPayload!
+        // TODO: Perhaps in ExtensionPayload! DONE!
         // TODO: Differentiate between ExtensionMessageId::Data and ExtensionMessageId::Reject and add else. So, => match, but unify Request and Unsupported.
         // Todo: Reject doesn't contain total_size and contents. Data contains both.
 
@@ -332,9 +329,9 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
     let hash_from_magnet_link = parse_magnet_link(magnet_link)?.xt;
     let calculated_info_hash = &info.info_hash_hex;
     if hash_from_magnet_link != *calculated_info_hash {
-        let err = PeerError::HashMismatch(hash_from_magnet_link, calculated_info_hash.clone());
+        let err = MagnetError::HashMismatch(hash_from_magnet_link, calculated_info_hash.clone());
         warn!("{err:#}");
-        return Err(err.into());
+        return Err(err);
     }
 
     // let info: Info = serde_bencode::from_bytes(&contents)?;

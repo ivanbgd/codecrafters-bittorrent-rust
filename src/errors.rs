@@ -91,6 +91,9 @@ pub enum MessageError {
     #[error(transparent)]
     Bincode(#[from] Box<bincode::ErrorKind>),
 
+    #[error("Reject message received from peer")]
+    Reject,
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -236,6 +239,9 @@ impl From<PeerError> for String {
 #[derive(Debug, Error)]
 pub enum MagnetError {
     #[error(transparent)]
+    MessageErr(#[from] MessageError),
+
+    #[error(transparent)]
     PeerError(#[from] PeerError),
 
     #[error("Parsing magnet link {0}.")]
@@ -255,9 +261,6 @@ pub enum MagnetError {
 
     #[error(transparent)]
     DeserializeError(#[from] serde_bencode::Error),
-
-    #[error(transparent)]
-    MessageErr(#[from] MessageError),
 
     #[error(transparent)]
     MessageIdErr(#[from] MessageIdError),

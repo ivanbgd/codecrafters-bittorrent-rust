@@ -23,11 +23,13 @@ use std::fmt::{Display, Formatter};
 
 use crate::bencode::{bencode_value, decode_bencoded_value};
 use crate::constants::{HashType, MAX_FRAME_SIZE};
-use crate::errors::{MessageCodecError, MessageError, MessageIdError, PiecePayloadError};
+use crate::errors::{
+    MagnetError, MessageCodecError, MessageError, MessageIdError, PeerError, PiecePayloadError,
+};
 use crate::meta_info::Info;
 use anyhow::{Context, Result};
 use bytes::{Buf, BufMut, BytesMut};
-use log::trace;
+use log::{trace, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_repr::*;
@@ -914,9 +916,16 @@ impl TryFrom<Vec<u8>> for ExtensionPayload {
         let id = value[0].try_into()?;
         let payload = &value[1..];
 
+        let payload_len = payload.len();
+        let info_len = 0usize;
+
+        // TODO: This acrobatic logic is NOT correct!!!
+        // It is correct for the first piece only, but not for other pieces!!!
+        // I'll have to do this outside of this function... :/ Good thing is I have metadata_size there, which is total_size.
+
         eprintln!(
             "<= value 1 = {:?}",
-            String::from_utf8_lossy(&payload[..133 - 91])
+            String::from_utf8_lossy(&payload[..payload_len - info_len])
         ); // todo rem
            // todo: this is failing!
            // let dict: ExtensionMessage = serde_bencode::from_bytes(&payload[1..1 + 133 - 91])?; // todo: 91
@@ -928,7 +937,7 @@ impl TryFrom<Vec<u8>> for ExtensionPayload {
            // let dict = serde_bencode::from_bytes(aux.as_bytes())?; // todo: rem
            // eprintln!("<= dict = {:?}", dict.as_object().unwrap()); // todo rem
 
-        let dict = &payload[..133 - 91];
+        let dict = &payload[..payload_len - 91];
         eprintln!("<= dict 1 = {}", String::from_utf8_lossy(dict)); // todo rem
         let dict = decode_bencoded_value(dict)?;
         eprintln!("<= dict 2 = {dict:?}"); // todo rem
@@ -941,15 +950,21 @@ impl TryFrom<Vec<u8>> for ExtensionPayload {
         eprintln!("<= dict 3 = {dict:?}"); // todo rem
         eprintln!("<= dict.msg_type = {:?}", dict.msg_type); // todo rem
 
+        if dict.msg_type == ExtensionMessageId::Reject {
+            let err = MessageError::Reject;
+            warn!("{err:#}");
+            return Err(err);
+        }
+
         eprintln!(
             "<= value 2 = {:?}",
-            String::from_utf8_lossy(&payload[133 - 91..])
+            String::from_utf8_lossy(&payload[payload_len - 91..])
         ); // todo rem
            // let info: Option<Info> = Some(bincode::deserialize(serde_bencode::from_bytes(
            //     &value[1 + 133 - 91..],
            // )?)?); // todo: 91
            // let info = b"d6:lengthi79752e4:name11:magnet2.gif12:piece lengthi262144e6:pieces20:ZZZZZZZZZZZZZZZZZZ12e";
-        let info = &payload[133 - 91..];
+        let info = &payload[payload_len - 91..];
         eprintln!("<= info 1 = {}", String::from_utf8_lossy(info)); // todo rem
         let pieces = &info[info.len() - 1 * 20 - 1..info.len() - 1]; // todo rem
         eprintln!("<= pieces 1 = {:?}", String::from_utf8_lossy(pieces)); // todo rem
