@@ -98,11 +98,11 @@ use crate::constants::{
     HashType, BLOCK_SIZE, CLIENT_NAME, COMPACT, DOWNLOADED, PEER_ID, PORT, SHA1_LEN, UPLOADED,
     UT_METADATA, UT_METADATA_ID,
 };
-use crate::errors::{MagnetError, PeerError};
+use crate::errors::{MagnetError, MessageError, PeerError};
 use crate::magnet::magnet_link::MagnetLink;
 use crate::message::{
     ExtendedMessageHandshakeDict, ExtendedMessageHandshakePayload, ExtendedMessageId,
-    ExtensionPayload, Message, MessageId,
+    ExtensionMessage, ExtensionMessageId, ExtensionPayload, Message, MessageId,
 };
 use crate::meta_info::Info;
 use crate::peer::Peer;
@@ -112,6 +112,7 @@ use anyhow::{Context, Result};
 use log::{debug, trace, warn};
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
+use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 
 /// Parses a given magnet link.
@@ -250,7 +251,7 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
     let metadata_size = peer.get_metadata_size()?;
     let num_pcs = metadata_size.div_ceil(BLOCK_SIZE);
 
-    let mut contents: Vec<u8> = Vec::with_capacity(metadata_size);
+    let mut metadata: Vec<u8> = Vec::with_capacity(metadata_size);
 
     // This extension only transfers the **info-dictionary** part of the .torrent file.
     //
@@ -283,47 +284,52 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
             warn!("Receive the metadata data or reject message: {err:#}");
             return Err(err.into());
         }
+
         let payload = msg
             .payload
             .expect("Expected to have received the metadata data or reject message");
-        contents.extend(&payload);
-        eprintln!("<= payload = {payload:?}"); // todo rem
-                                               // let pl = payload.info.unwrap(); // todo rem
-                                               // eprintln!("<= pl.info = {}", pl); // todo rem
-                                               // eprintln!("<= pl.info.pieces = {}", pl.get("pieces").unwrap()); // todo: rem! improve; ok_or(), ...
-                                               // eprintln!("<= total_size = {:?}", payload.payload.get("total_size".as_bytes())); // todo rem
+        let (dict, info) = if piece_index == 0 {
+            payload.split_at(payload.len() - metadata_size)
+        } else {
+            payload.split_at(0)
+        };
 
-        // TODO: Connect all lines together.
-
-        // TODO: This slows things down, because we need to convert each piece just for this check. Perhaps keep it with this comment.
         // The other peers should send our metadata ID in their responses.
-        // if UT_METADATA_ID != <u8>::from(payload.id.clone()) {
-        //     let err = PeerError::WrongExtendedMessageId(UT_METADATA_ID.try_into()?, payload.id);
-        //     warn!("Receive the metadata data or reject message: {err:#}");
-        //     return Err(err.into());
-        // }
+        if UT_METADATA_ID != dict[0] {
+            let err =
+                PeerError::WrongExtendedMessageId(UT_METADATA_ID.try_into()?, dict[0].try_into()?);
+            warn!("Receive the metadata data or reject message: {err:#}");
+            return Err(err.into());
+        }
 
-        // eprintln!("<= payload.dict = {:?}", payload.dict); // todo rem
+        // The first byte is reserved for ExtendedMessageId, so skip it.
+        let dict = &dict[1..];
+        eprintln!(
+            "{} {}; {}",
+            String::from_utf8(dict.to_vec()).unwrap(),
+            dict.len(),
+            info.len()
+        );
+        let dict: ExtensionMessage = dict.try_into()?;
+        if dict.msg_type == ExtensionMessageId::Reject {
+            let err = MagnetError::Reject(peer.addr);
+            warn!("{err:#}");
+            return Err(err);
+        }
 
-        // let val: ExtensionMessage = serde_bencode::from_bytes(&payload.payload)?; // todo rem
-        // eprintln!("<= val = {val:?}"); // todo rem
-
-        // TODO: Perhaps in ExtensionPayload! DONE!
-        // TODO: Differentiate between ExtensionMessageId::Data and ExtensionMessageId::Reject and add else. So, => match, but unify Request and Unsupported.
-        // Todo: Reject doesn't contain total_size and contents. Data contains both.
-
-        // Todo: search for "ee" in utf8_lossy representation of payload.payload. Both Data and Reject should have it.
-        // Todo: Now, I can do that here or in ExtensionPayload - decide. Perhaps better in ExtensionPayload to remove that logic from here. We are doing a higher-level logic here.
-
-        // let _total_size = metadata_size; // todo rem
-        // let len = payload.payload.len(); // todo: do properly! not here, perhaps?!
-        // eprintln!("<= len = {len}"); // todo rem
-        // contents.extend(&payload.payload[len - total_size..][..]); // todo
+        metadata.extend(info);
     }
 
-    let payload: ExtensionPayload = contents.try_into()?;
-    let info = payload.info.unwrap(); // todo: ok_or()
-                                      // let info: Info = serde_json::from_value(info).unwrap(); // todo: unwrap
+    let info_hash: HashType = *Sha1::digest(&metadata).as_ref();
+    let info_hash_hex = hex::encode(info_hash);
+
+    let mut info: Info = serde_bencode::from_bytes(&metadata)?;
+    info.info_hash = info_hash;
+    info.info_hash_hex = info_hash_hex;
+
+    // let payload: ExtensionPayload = metadata.try_into()?;
+    // let info = payload.info.unwrap(); // todo: ok_or()
+    //                                   // let info: Info = serde_json::from_value(info).unwrap(); // todo: unwrap
 
     // Validate hash
     let hash_from_magnet_link = parse_magnet_link(magnet_link)?.xt;
@@ -334,7 +340,6 @@ pub async fn request_magnet_info(magnet_link: &str) -> Result<Info, MagnetError>
         return Err(err);
     }
 
-    // let info: Info = serde_bencode::from_bytes(&contents)?;
     eprintln!("<= info = {}", &info); // todo rem
     eprintln!("<= info = {:?}", &info); // todo rem
 
