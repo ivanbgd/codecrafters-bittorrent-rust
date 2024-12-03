@@ -37,12 +37,10 @@ thiserror = "1.0.38"                                               # error handl
 tokio = { version = "1.23.0", features = ["full"] }                # async http requests
 
 # My additions
-bincode = "1.3.3"
 env_logger = "0.11.5"
 futures-util = { version = "0.3.31", features = ["sink"] }
 log = "0.4.20"
 rand = "0.8.5"
 serde_repr = "0.1.19"
-serde_with = "3.11.0"
 tokio-util = { version = "0.7.12", features = ["full"] }
 urlencoding = "2.1.3"
